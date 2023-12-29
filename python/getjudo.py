@@ -121,8 +121,8 @@ class notification_entity():
     def publish(self, message, debuglevel):
         self.value = message
         #msg = str(self.value)
-        now = datetime.date.now()
-        msg = config_getjudo.Name + ":" + str(now.strftime("%Y-%m-%d %H:%M:%S")) + str(self.value)
+        now = datetime.now()
+        msg = config_getjudo.NAME + ":" + str(now.strftime(" %Y-%m-%d %H:%M:%S ")) + str(self.value)
         print(msg)
         if config_getjudo.MQTT_DEBUG_LEVEL  >= debuglevel:
             client.publish(notification_topic, msg, qos=0, retain=True)
