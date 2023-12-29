@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 import urllib3
 import json
-#import time
+import time
 import gc
 import os
 import sys
 import config_getjudo
 import messages_getjudo
 import hashlib
+import math
 from paho.mqtt import client as mqtt
-from datetime import date
+from datetime import datetime
 import pickle
 from threading import Timer
 from dataclasses import dataclass
@@ -49,6 +50,7 @@ class entity():
 
         if self.entity_type == "total_increasing":
             entity_config["device_class"] = "water"
+            entity_config["state_class"] = "total_increasing"
             entity_config["state_class"] = self.entity_type
             entity_config["unit_of_measurement"] = self.unit
             self.entity_type = "sensor"
@@ -118,7 +120,9 @@ class notification_entity():
 
     def publish(self, message, debuglevel):
         self.value = message
-        msg = str(self.value)
+        #msg = str(self.value)
+        now = datetime.date.now()
+        msg = config_getjudo.Name + ":" + str(now.strftime("%Y-%m-%d %H:%M:%S")) + str(self.value)
         print(msg)
         if config_getjudo.MQTT_DEBUG_LEVEL  >= debuglevel:
             client.publish(notification_topic, msg, qos=0, retain=True)
@@ -138,6 +142,10 @@ class savedata:
     da = 0
     dt = 0
     serial = 0
+    reg_mean_time = 0
+    reg_mean_counter = 1
+    reg_last_val = 0
+    reg_last_timestamp = 0
 
 
 def on_connect(client, userdata, flags, rc):
@@ -164,7 +172,18 @@ def on_message(client, userdata, message):
         command_json = json.loads(message.payload)
         
         if output_hardness.name in command_json:
-            set_value(output_hardness, 60, command_json[output_hardness.name], 8)
+            if config_getjudo.USE_SODIUM_CHECK == True:
+                sodium = round(((input_hardness.value - command_json[output_hardness.name]) * 8.2) + config_getjudo.SODIUM_INPUT,1)
+                if  sodium < config_getjudo.SODIUM_LIMIT:
+                    if send_command(str(60), int_to_le_hex(command_json[output_hardness.name], 8)):
+                        notify.publish(messages_getjudo.debug[43].format(sodium, config_getjudo.SODIUM_LIMIT, command_json[output_hardness.name]), 2)
+                else:
+                    limited_hardness = input_hardness.value - ((config_getjudo.SODIUM_LIMIT - config_getjudo.SODIUM_INPUT)/8.2)
+                    limited_hardness = math.ceil(limited_hardness) #round up
+                    if send_command(str(60), int_to_le_hex(limited_hardness, 8)):
+                        notify.publish(messages_getjudo.debug[44].format(limited_hardness), 2)
+            else:
+                set_value(output_hardness, 60, command_json[output_hardness.name], 8)
 
         elif salt_stock.name in command_json:
             set_value(salt_stock, 94,command_json[salt_stock.name]*1000, 16)
@@ -194,7 +213,6 @@ def on_message(client, userdata, message):
             print(messages_getjudo.debug[6])
     except Exception as e:
         notify.publish([messages_getjudo.debug[27].format(sys.exc_info()[-1].tb_lineno),e], 3)
-
 
 
 def publish_json(client, topic, message):
@@ -304,7 +322,7 @@ output_hardness = entity(messages_getjudo.entities[6], "mdi:water-minus", "numbe
 input_hardness = entity(messages_getjudo.entities[7], "mdi:water-plus", "sensor", "°dH")
 water_flow = entity(messages_getjudo.entities[8], "mdi:waves-arrow-right", "sensor", "L/h")
 batt_capacity = entity(messages_getjudo.entities[9], "mdi:battery-50", "sensor", "%")
-regenerations = entity(messages_getjudo.entities[10], "mdi:recycle-variant", "sensor")
+regenerations = entity(messages_getjudo.entities[10], "mdi:water-sync", "sensor")
 water_lock = entity(messages_getjudo.entities[11], "mdi:pipe-valve", "switch")
 regeneration_start = entity(messages_getjudo.entities[12], "mdi:recycle-variant", "switch")
 sleepmode = entity(messages_getjudo.entities[13], "mdi:pause-octagon", "number", "h", 0, 10)
@@ -315,6 +333,8 @@ holidaymode = entity(messages_getjudo.entities[20], "mdi:palm-tree", "select", m
 water_today = entity(messages_getjudo.entities[14], "mdi:chart-box", "sensor", "L")
 water_yesterday = entity(messages_getjudo.entities[15], "mdi:chart-box-outline", "sensor", "L")
 notify = notification_entity(messages_getjudo.entities[16], "mdi:alert-outline")
+h_since_last_reg = entity(messages_getjudo.entities[21], "mdi:water-sync", "sensor", "h")
+avg_reg_interval = entity(messages_getjudo.entities[22], "mdi:water-sync", "sensor", "h")
 
 try: 
     client = mqtt.Client()
@@ -344,6 +364,10 @@ try:
     print ("dt: {}".format(mydata.dt))
     print ("serial: {}".format(mydata.serial))
     print ("token: {}".format(mydata.token))
+    print ("avergage regeneration interval: {}h".format(mydata.reg_mean_time))
+    print ("counter for avg-calc: {}".format(mydata.reg_mean_counter))
+    print ("last regenerations count: {}".format(mydata.reg_last_val))
+    print ("timestamp of last regeneration: {}s".format(mydata.reg_last_timestamp))
 
 except Exception as e:
     notify.publish([messages_getjudo.debug[29].format(sys.exc_info()[-1].tb_lineno),e], 3)
@@ -357,6 +381,9 @@ except Exception as e:
 
 if mydata.token == 0:
     mydata.token = judo_login(config_getjudo.JUDO_USER, config_getjudo.JUDO_PASSWORD)
+
+
+avg_reg_interval.value = mydata.reg_mean_time
 
 
 #----- Mainthread ----
@@ -408,7 +435,7 @@ def main():
             if water_lock.value > 1:
                 water_lock.value = 1
 
-            today = date.today()
+            today = datetime.today()
             #It's 12pm...a new day. Store today's value to yesterday's value and setting a new offset for a new count
             if today.day != mydata.day_today:
                 mydata.day_today = today.day
@@ -416,6 +443,22 @@ def main():
                 water_yesterday.value = water_today.value
                 mydata.water_yesterday = water_today.value
             water_today.value = int(1000*total_water.value) - mydata.offset_total_water
+
+            #Hours since last regeneration / Average regeneration interval
+            if regenerations.value > mydata.reg_last_val:
+                if (regenerations.value - mydata.reg_last_val) == 1: #Regeneration has started, 
+                    h_since_last_reg.value = int((int(time.time()) - mydata.reg_last_timestamp)/3600)
+                    avg_reg_interval.value = int(((mydata.reg_mean_counter-1)*mydata.reg_mean_time + h_since_last_reg.value)/mydata.reg_mean_counter)
+                    mydata.reg_mean_time = avg_reg_interval.value
+                    mydata.reg_mean_counter += 1
+                    mydata.reg_last_timestamp = int(time.time()) 
+                    mydata.reg_last_val = regenerations.value
+                else:
+                    mydata.reg_last_val = regenerations.value
+
+            if mydata.reg_last_timestamp != 0:
+                h_since_last_reg.value = int((int(time.time()) - mydata.reg_last_timestamp)/3600)
+
 
             #print("Publishing parsed values over MQTT....")
             outp_val_dict = {}
@@ -478,4 +521,3 @@ def main():
 Function_Caller(config_getjudo.STATE_UPDATE_INTERVAL, main).start()
 
 notify.publish(messages_getjudo.debug[39], 2)   #Init Complete
-
