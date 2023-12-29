@@ -29,7 +29,9 @@ if config_getjudo.LANGUAGE == "DE":
         17 : "max_Entnahmedauer",
         18 : "max_Wasserdurchfluss",
         19 : "max_Entnahmemenge",
-        20 : "Urlaubsmodus"
+        20 : "Urlaubsmodus",
+        21 : "Stunden_seit_letzter_Regeneration",
+        22 : "durchschn_Regenerationsintervall"
     }
 
     debug = {
@@ -74,7 +76,9 @@ if config_getjudo.LANGUAGE == "DE":
         39: "Initialisierung erfolgreich!",
         40: "Urlaubsmodus wurde erfolgreich deaktiviert",
         41: "Tempfile scheinbar korrupt oder nicht vorhanden, Schreibe neu",
-        42: "Beende Script. Schwerwiegender Fehler in Zeile: {}"
+        42: "Beende Script. Schwerwiegender Fehler in Zeile: {}",
+        43: "Errechneter Natriumgehalt: {}mg/L < {}mg/L bei {}°dH",
+        44: "Natriumgrenzwert würde überschritten werden. Wunschwasserhärte wird auf {} °dH gesetzt"
 
     }
 
@@ -163,7 +167,9 @@ else:
         17: "max_withdrawal_quantity",
         18: "max_volumetric_flow_rate",
         19: "max_consumption",
-        20: "Holiday_mode"
+        20: "Holiday_mode",
+        21 : "Hours_since_last_regeneration",
+        22 : "Avg_regeneration_interval"
     }
 
     debug = {
@@ -208,7 +214,9 @@ else:
         39: "Init successful!",
         40: "Holidaymode has been deactivated successfully",
         41: "Temp-file seems to be currupt or not existent, writing a new one",
-        42: "Canceling Script, Fatal Error on line: {}"
+        42: "Canceling Script, Fatal Error on line: {}",
+        43: "Calculated sodium content: {}mg/L < {}mg/L at {}°dH",
+        44: "Sodium level would be exceeded. Desired hardness set to {} °dH"
     }
 
 
@@ -270,7 +278,6 @@ else:
         "13": "Double fault: Lsu is not detected and Lso always wet",
         "14": "RS 485 connection problem"
     }
-
 
 
 
