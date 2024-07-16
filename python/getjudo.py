@@ -398,7 +398,11 @@ def main():
             mydata.dt = response_json["data"][0]["data"][0]["dt"]
 
             next_revision.parse(response_json, 7, 0, 4)
+            total_water_temp = total_water.value
             total_water.parse(response_json, 8, 0, 8)
+            if total_water.value<total_water_temp:
+                notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(total_water.value),3)
+                total_water.value = total_water_temp
             total_softwater_proportion.parse(response_json, 9, 0, 8)
             salt_stock.parse(response_json,94, 0, 4)
             salt_range.parse(response_json,94, 4, 8)
