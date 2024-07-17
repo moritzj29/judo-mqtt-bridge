@@ -353,8 +353,9 @@ except Exception as e:
 print (messages_getjudo.debug[34])
 print ("----------------------")
 try:
-    with open(config_getjudo.TEMP_FILE,"rb") as temp_file:
-        mydata = pickle.load(temp_file)
+    if config_getjudo.RUN_IN_APPDEAMON == True:
+        with open(config_getjudo.TEMP_FILE,"rb") as temp_file:
+            mydata = pickle.load(temp_file)
     print (messages_getjudo.debug[35].format(mydata.last_err_id))
     print (messages_getjudo.debug[36].format(mydata.water_yesterday))
     water_yesterday.value = mydata.water_yesterday
@@ -400,7 +401,7 @@ def main():
             next_revision.parse(response_json, 7, 0, 4)
             total_water_temp = total_water.value
             total_water.parse(response_json, 8, 0, 8)
-            if total_water.value<total_water_temp:
+            if total_water.value < total_water_temp:
                 notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(total_water.value),3)
                 total_water.value = total_water_temp
             total_softwater_proportion.parse(response_json, 9, 0, 8)
@@ -508,8 +509,9 @@ def main():
         notify.counter += 1
 
     try:
-        with open(config_getjudo.TEMP_FILE,"wb") as temp_file:
-            pickle.dump(mydata, temp_file)
+        if config_getjudo.RUN_IN_APPDEAMON == True:
+            with open(config_getjudo.TEMP_FILE,"wb") as temp_file:
+                pickle.dump(mydata, temp_file)
     except Exception as e:
         notify.publish([messages_getjudo.debug[29].format(sys.exc_info()[-1].tb_lineno),e], 3)
         notify.counter += 1
