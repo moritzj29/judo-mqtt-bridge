@@ -389,121 +389,133 @@ avg_reg_interval.value = mydata.reg_mean_time
 
 #----- Mainthread ----
 def main():
+    data_valid = False
     try:
         response = http.request('GET',f"https://www.myjudo.eu/interface/?token={mydata.token}&group=register&command=get%20device%20data")
-        response_json = json.loads(response.data)
-        if response_json["status"] ==  "ok":
-            #print("Parsing values from response...")
-            mydata.serial = response_json["data"][0]["serialnumber"]
-            mydata.da = response_json["data"][0]["data"][0]["da"]
-            mydata.dt = response_json["data"][0]["data"][0]["dt"]
+        try:
+            response_json = json.loads(response.data)
+            data_valid = True
+        except Exception as e:
+            notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),str(e) + " - "+ str(response.data)], 3)
+            notify.counter += 1            
+        if data_valid == True:
+            if response_json["status"] ==  "ok":
+                #print("Parsing values from response...")
+                mydata.serial = response_json["data"][0]["serialnumber"]
+                mydata.da = response_json["data"][0]["data"][0]["da"]
+                mydata.dt = response_json["data"][0]["data"][0]["dt"]
 
-            next_revision.parse(response_json, 7, 0, 4)
-            total_water_temp = total_water.value
-            total_water.parse(response_json, 8, 0, 8)
-            if total_water.value < total_water_temp:
-                notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(total_water.value),3)
-                total_water.value = total_water_temp
-            total_softwater_proportion.parse(response_json, 9, 0, 8)
-            salt_stock.parse(response_json,94, 0, 4)
-            salt_range.parse(response_json,94, 4, 8)
-            output_hardness.parse(response_json, 790, 18, 20)
-            input_hardness.parse(response_json, 790, 54, 56)
-            water_flow.parse(response_json, 790, 34, 38)
-            regenerations.parse(response_json, 791, 62, 66)
-            regeneration_start.parse(response_json, 791, 2, 4)
-            batt_capacity.parse(response_json, 93, 6, 8)
-            water_lock.parse(response_json, 792, 2, 4)
-            sleepmode.parse(response_json,792, 20, 22)
-            max_waterflow.parse(response_json, 792, 26, 30)
-            extraction_quantity.parse(response_json, 792, 30, 34)
-            extraction_time.parse(response_json, 792, 34, 38)
-            holidaymode.parse(response_json,792, 38, 40)
+                next_revision.parse(response_json, 7, 0, 4)
+                total_water_temp = total_water.value * 1000
+                total_water.parse(response_json, 8, 0, 8)
+                if total_water.value < total_water_temp:
+                    notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(total_water.value),3)
+                    total_water.value = total_water_temp
+                total_softwater_proportion.parse(response_json, 9, 0, 8)
+                salt_stock.parse(response_json,94, 0, 4)
+                salt_range.parse(response_json,94, 4, 8)
+                output_hardness.parse(response_json, 790, 18, 20)
+                input_hardness.parse(response_json, 790, 54, 56)
+                water_flow.parse(response_json, 790, 34, 38)
+                regenerations.parse(response_json, 791, 62, 66)
+                regeneration_start.parse(response_json, 791, 2, 4)
+                batt_capacity.parse(response_json, 93, 6, 8)
+                water_lock.parse(response_json, 792, 2, 4)
+                sleepmode.parse(response_json,792, 20, 22)
+                max_waterflow.parse(response_json, 792, 26, 30)
+                extraction_quantity.parse(response_json, 792, 30, 34)
+                extraction_time.parse(response_json, 792, 34, 38)
+                holidaymode.parse(response_json,792, 38, 40)
 
-            if holidaymode.value == 3:      #mode1
-                holidaymode.value = messages_getjudo.holiday_options[2]
-            elif holidaymode.value == 5:    #mode2
-                holidaymode.value = messages_getjudo.holiday_options[3]
-            elif holidaymode.value == 9:    #lock
-                holidaymode.value = messages_getjudo.holiday_options[1]
-            else:                           #off
-                holidaymode.value = messages_getjudo.holiday_options[0]
+                if holidaymode.value == 3:      #mode1
+                    holidaymode.value = messages_getjudo.holiday_options[2]
+                elif holidaymode.value == 5:    #mode2
+                    holidaymode.value = messages_getjudo.holiday_options[3]
+                elif holidaymode.value == 9:    #lock
+                    holidaymode.value = messages_getjudo.holiday_options[1]
+                else:                           #off
+                    holidaymode.value = messages_getjudo.holiday_options[0]
 
-            next_revision.value = int(next_revision.value/24)   #Calculation hours to days
-            total_water.value =float(total_water.value/1000) # Calculating from L to m³
-            total_softwater_proportion.value = float(total_softwater_proportion.value/1000)# Calculating from L to m³
-            total_hardwater_proportion.value = round((total_water.value - total_softwater_proportion.value),3)
-            salt_stock.value /= 1000 
-            regeneration_start.value &= 0x0F
-            if regeneration_start.value > 0:
-                regeneration_start.value = 1
-            if water_lock.value > 1:
-                water_lock.value = 1
+                next_revision.value = int(next_revision.value/24)   #Calculation hours to days
+                total_water.value =float(total_water.value/1000) # Calculating from L to m³
+                total_softwater_proportion.value = float(total_softwater_proportion.value/1000)# Calculating from L to m³
+                total_hardwater_proportion.value = round((total_water.value - total_softwater_proportion.value),3)
+                salt_stock.value /= 1000 
+                regeneration_start.value &= 0x0F
+                if regeneration_start.value > 0:
+                    regeneration_start.value = 1
+                if water_lock.value > 1:
+                    water_lock.value = 1
 
-            today = datetime.today()
-            #It's 12pm...a new day. Store today's value to yesterday's value and setting a new offset for a new count
-            if today.day != mydata.day_today:
-                mydata.day_today = today.day
-                mydata.offset_total_water = int(1000*total_water.value)
-                water_yesterday.value = water_today.value
-                mydata.water_yesterday = water_today.value
-            water_today.value = int(1000*total_water.value) - mydata.offset_total_water
+                today = datetime.today()
+                #It's 12pm...a new day. Store today's value to yesterday's value and setting a new offset for a new count
+                if today.day != mydata.day_today:
+                    mydata.day_today = today.day
+                    mydata.offset_total_water = int(1000*total_water.value)
+                    water_yesterday.value = water_today.value
+                    mydata.water_yesterday = water_today.value
+                water_today.value = int(1000*total_water.value) - mydata.offset_total_water
 
-            #Hours since last regeneration / Average regeneration interval
-            if regenerations.value > mydata.reg_last_val:
-                if (regenerations.value - mydata.reg_last_val) == 1: #Regeneration has started, 
+                #Hours since last regeneration / Average regeneration interval
+                if regenerations.value > mydata.reg_last_val:
+                    if (regenerations.value - mydata.reg_last_val) == 1: #Regeneration has started, 
+                        h_since_last_reg.value = int((int(time.time()) - mydata.reg_last_timestamp)/3600)
+                        avg_reg_interval.value = int(((mydata.reg_mean_counter-1)*mydata.reg_mean_time + h_since_last_reg.value)/mydata.reg_mean_counter)
+                        mydata.reg_mean_time = avg_reg_interval.value
+                        mydata.reg_mean_counter += 1
+                        mydata.reg_last_timestamp = int(time.time()) 
+                        mydata.reg_last_val = regenerations.value
+                    else:
+                        mydata.reg_last_val = regenerations.value
+
+                if mydata.reg_last_timestamp != 0:
                     h_since_last_reg.value = int((int(time.time()) - mydata.reg_last_timestamp)/3600)
-                    avg_reg_interval.value = int(((mydata.reg_mean_counter-1)*mydata.reg_mean_time + h_since_last_reg.value)/mydata.reg_mean_counter)
-                    mydata.reg_mean_time = avg_reg_interval.value
-                    mydata.reg_mean_counter += 1
-                    mydata.reg_last_timestamp = int(time.time()) 
-                    mydata.reg_last_val = regenerations.value
-                else:
-                    mydata.reg_last_val = regenerations.value
-
-            if mydata.reg_last_timestamp != 0:
-                h_since_last_reg.value = int((int(time.time()) - mydata.reg_last_timestamp)/3600)
 
 
-            #print("Publishing parsed values over MQTT....")
-            outp_val_dict = {}
-            for obj in gc.get_objects():
-                if isinstance(obj, entity):
-                    outp_val_dict[obj.name] = str(obj.value)
-            publish_json(client, state_topic, outp_val_dict)
-
-        elif response_json["status"] == "error":
-            notify.counter += 1
-            if response_json["data"] == "login failed":
-                notify.publish(messages_getjudo.debug[23],3)
-                mydata.token = judo_login(config_getjudo.JUDO_USER, config_getjudo.JUDO_PASSWORD)
-            else:
-                val = response_json["data"]
-                notify.publish(messages_getjudo.debug[24].format(val),3)
+                #print("Publishing parsed values over MQTT....")
+                outp_val_dict = {}
+                for obj in gc.get_objects():
+                    if isinstance(obj, entity):
+                        outp_val_dict[obj.name] = str(obj.value)
+                publish_json(client, state_topic, outp_val_dict)
+            elif response_json["status"] == "error":
                 notify.counter += 1
-        else:
-            print(messages_getjudo.debug[25])
-            notify.counter += 1
+                if response_json["data"] == "login failed":
+                    notify.publish(messages_getjudo.debug[23],3)
+                    mydata.token = judo_login(config_getjudo.JUDO_USER, config_getjudo.JUDO_PASSWORD)
+                else:
+                    val = response_json["data"]
+                    notify.publish(messages_getjudo.debug[24].format(val),3)
+                    notify.counter += 1
+            else:
+                print(messages_getjudo.debug[25])
+                notify.counter += 1
     except Exception as e:
         notify.publish([messages_getjudo.debug[31].format(sys.exc_info()[-1].tb_lineno),e],3)
         notify.counter += 1
 
     try:
         error_response = http.request('GET',f"https://myjudo.eu/interface/?token={mydata.token}&group=register&command=get%20error%20messages")
-        error_response_json = json.loads(error_response.data)
-        if error_response_json["data"] != [] and error_response_json["count"] != 0:
-            if mydata.last_err_id != error_response_json["data"][0]["id"]:
-                mydata.last_err_id = error_response_json["data"][0]["id"]
+        try:
+                error_response_json = json.loads(error_response.data)
+                data_valid = True
+        except Exception as e:
+            notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),str(e) + " - "+ str(error_response.data)], 3)
+            notify.counter += 1            
+        if data_valid == True:
+            if error_response_json["data"] != [] and error_response_json["count"] != 0:
+                if mydata.last_err_id != error_response_json["data"][0]["id"]:
+                    mydata.last_err_id = error_response_json["data"][0]["id"]
 
-                timestamp = error_response_json["data"][0]["ts_sort"]
-                timestamp = timestamp[:-7] + ": "
+                    timestamp = error_response_json["data"][0]["ts_sort"]
+                    timestamp = timestamp[:-7] + ": "
 
-                if error_response_json["data"][0]["type"] == "w":
-                    error_message = timestamp + messages_getjudo.warnings[error_response_json["data"][0]["error"]]
-                    notify.publish(error_message, 1)
-                elif error_response_json["data"][0]["type"] == "e":
-                    error_message = timestamp + messages_getjudo.errors[error_response_json["data"][0]["error"]]
-                    notify.publish(error_message, 1)
+                    if error_response_json["data"][0]["type"] == "w":
+                        error_message = timestamp + messages_getjudo.warnings[error_response_json["data"][0]["error"]]
+                        notify.publish(error_message, 1)
+                    elif error_response_json["data"][0]["type"] == "e":
+                        error_message = timestamp + messages_getjudo.errors[error_response_json["data"][0]["error"]]
+                        notify.publish(error_message, 1)
     except Exception as e:
         notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),e], 3)
         notify.counter += 1
