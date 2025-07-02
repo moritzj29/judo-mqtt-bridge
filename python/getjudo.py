@@ -11,7 +11,7 @@ import messages_getjudo
 import hashlib
 import math
 from paho.mqtt import client as mqtt
-from datetime import date
+from datetime import datetime
 import pickle
 from threading import Timer
 from dataclasses import dataclass
@@ -121,6 +121,8 @@ class notification_entity():
     def publish(self, message, debuglevel):
         self.value = message
         msg = str(self.value)
+        #now = datetime.now()
+        #msg = config_getjudo.NAME + ":" + str(now.strftime(" %Y-%m-%d %H:%M:%S ")) + str(self.value)
         print(msg)
         if config_getjudo.MQTT_DEBUG_LEVEL  >= debuglevel:
             client.publish(notification_topic, msg, qos=0, retain=True)
@@ -319,7 +321,10 @@ next_revision = entity(messages_getjudo.entities[0], "mdi:account-wrench", "sens
 total_water = entity(messages_getjudo.entities[1], "mdi:water-circle", "total_increasing", "m³")
 output_hardness = entity(messages_getjudo.entities[6], "mdi:water-minus", "number", "°dH", 1, 15)
 input_hardness = entity(messages_getjudo.entities[7], "mdi:water-plus", "sensor", "°dH")
+water_flow = entity(messages_getjudo.entities[8], "mdi:waves-arrow-right", "sensor", "L/h")
+batt_capacity = entity(messages_getjudo.entities[9], "mdi:battery-50", "sensor", "%")
 regenerations = entity(messages_getjudo.entities[10], "mdi:water-sync", "sensor")
+water_lock = entity(messages_getjudo.entities[11], "mdi:pipe-valve", "switch")
 regeneration_start = entity(messages_getjudo.entities[12], "mdi:recycle-variant", "switch")
 water_today = entity(messages_getjudo.entities[14], "mdi:chart-box", "sensor", "L")
 water_yesterday = entity(messages_getjudo.entities[15], "mdi:chart-box-outline", "sensor", "L")
@@ -360,8 +365,9 @@ except Exception as e:
 print (messages_getjudo.debug[34])
 print ("----------------------")
 try:
-    with open(config_getjudo.TEMP_FILE,"rb") as temp_file:
-        mydata = pickle.load(temp_file)
+    if config_getjudo.RUN_IN_APPDEAMON == True:
+        with open(config_getjudo.TEMP_FILE,"rb") as temp_file:
+            mydata = pickle.load(temp_file)
     print (messages_getjudo.debug[35].format(mydata.last_err_id))
     print (messages_getjudo.debug[36].format(mydata.water_yesterday))
     water_yesterday.value = mydata.water_yesterday
@@ -398,18 +404,29 @@ avg_reg_interval.value = mydata.reg_mean_time
 
 #----- Mainthread ----
 def main():
+    data_valid = False
     try:
         response = http.request('GET',f"https://www.myjudo.eu/interface/?token={mydata.token}&group=register&command=get%20device%20data")
-        response_json = json.loads(response.data)
-        if response_json["status"] ==  "ok":
-            #print("Parsing values from response...")
-            mydata.serial = response_json["data"][0]["serialnumber"]
-            mydata.da = response_json["data"][0]["data"][0]["da"]
-            mydata.dt = response_json["data"][0]["data"][0]["dt"]
+        try:
+            response_json = json.loads(response.data)
+            data_valid = True
+        except Exception as e:
+            notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),str(e) + " - "+ str(response.data)], 3)
+            notify.counter += 1            
+        if data_valid == True:
+            if response_json["status"] ==  "ok":
+                #print("Parsing values from response...")
+                mydata.serial = response_json["data"][0]["serialnumber"]
+                mydata.da = response_json["data"][0]["data"][0]["da"]
+                mydata.dt = response_json["data"][0]["data"][0]["dt"]
 
             next_revision.parse(response_json, 7, 0, 4)
             if config_getjudo.USE_WITH_SOFTWELL_P == False:
+                total_water_temp = total_water.value * 1000
                 total_water.parse(response_json, 8, 0, 8)
+                if total_water.value < total_water_temp:
+                    notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(total_water.value),3)
+                    total_water.value = total_water_temp
                 salt_stock.parse(response_json,94, 0, 4)
                 salt_range.parse(response_json,94, 4, 8)
                 total_softwater_proportion.parse(response_json, 9, 0, 8)
@@ -453,7 +470,7 @@ def main():
                 regeneration_start.value = 1
 
 
-            today = date.today()
+            today = datetime.today()
             #It's 12pm...a new day. Store today's value to yesterday's value and setting a new offset for a new count
             if today.day != mydata.day_today:
                 mydata.day_today = today.day
@@ -495,7 +512,6 @@ def main():
                 else:
                     mixratio.value = "unknown"
 
-
             #print("Publishing parsed values over MQTT....")
             outp_val_dict = {}
             for obj in gc.get_objects():
@@ -521,27 +537,34 @@ def main():
 
     try:
         error_response = http.request('GET',f"https://myjudo.eu/interface/?token={mydata.token}&group=register&command=get%20error%20messages")
-        error_response_json = json.loads(error_response.data)
-        if error_response_json["data"] != [] and error_response_json["count"] != 0:
-            if mydata.last_err_id != error_response_json["data"][0]["id"]:
-                mydata.last_err_id = error_response_json["data"][0]["id"]
+        try:
+            error_response_json = json.loads(error_response.data)
+            data_valid = True
+        except Exception as e:
+            notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),str(e) + " - "+ str(error_response.data)], 3)
+            notify.counter += 1            
+        if data_valid == True:
+            if error_response_json["data"] != [] and error_response_json["count"] != 0:
+                if mydata.last_err_id != error_response_json["data"][0]["id"]:
+                    mydata.last_err_id = error_response_json["data"][0]["id"]
 
-                timestamp = error_response_json["data"][0]["ts_sort"]
-                timestamp = timestamp[:-7] + ": "
+                    timestamp = error_response_json["data"][0]["ts_sort"]
+                    timestamp = timestamp[:-7] + ": "
 
-                if error_response_json["data"][0]["type"] == "w":
-                    error_message = timestamp + messages_getjudo.warnings[error_response_json["data"][0]["error"]]
-                    notify.publish(error_message, 1)
-                elif error_response_json["data"][0]["type"] == "e":
-                    error_message = timestamp + messages_getjudo.errors[error_response_json["data"][0]["error"]]
-                    notify.publish(error_message, 1)
+                    if error_response_json["data"][0]["type"] == "w":
+                        error_message = timestamp + messages_getjudo.warnings[error_response_json["data"][0]["error"]]
+                        notify.publish(error_message, 1)
+                    elif error_response_json["data"][0]["type"] == "e":
+                        error_message = timestamp + messages_getjudo.errors[error_response_json["data"][0]["error"]]
+                        notify.publish(error_message, 1)
     except Exception as e:
         notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),e], 3)
         notify.counter += 1
 
     try:
-        with open(config_getjudo.TEMP_FILE,"wb") as temp_file:
-            pickle.dump(mydata, temp_file)
+        if config_getjudo.RUN_IN_APPDEAMON == True:
+            with open(config_getjudo.TEMP_FILE,"wb") as temp_file:
+                pickle.dump(mydata, temp_file)
     except Exception as e:
         notify.publish([messages_getjudo.debug[29].format(sys.exc_info()[-1].tb_lineno),e], 3)
         notify.counter += 1
