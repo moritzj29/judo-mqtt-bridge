@@ -355,6 +355,9 @@ try:
     if config_getjudo.USE_MQTT_AUTH:
         client.username_pw_set(config_getjudo.MQTTUSER, config_getjudo.MQTTPASSWD)
     client.will_set(availability_topic, config_getjudo.AVAILABILITY_OFFLINE, qos=0, retain=True)
+    if config_getjudo.USE_MQTT_TLS:
+        # default TLS settings require a valid certificate
+        client.tls_set()
     client.connect(config_getjudo.BROKER, config_getjudo.PORT, 60)
     client.loop_start()
 except Exception as e:

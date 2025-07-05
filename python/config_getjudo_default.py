@@ -8,9 +8,10 @@ JUDO_PASSWORD = "myjudopassword"
 #MQTT Config
 BROKER = "192.168.1.2"              #Broker IP
 USE_MQTT_AUTH = True                #Set true, if user/pw authentification on broker, set false, if using anonymous login
+USE_MQTT_TLS = False                #Set true, if using TLS/SSL for MQTT connection
 MQTTUSER = "mqttuser"               #only required if USE_MQTT_AUTH = True
 MQTTPASSWD = "mosquitto"            #only required if USE_MQTT_AUTH = True
-PORT = 1883                         #MQTT PORT, 1883 default standard
+PORT = 1883                         #MQTT PORT, 1883 default standard, 8883 if using TLS/SSL
 
 #General Config
 LOCATION = "my_location"            #Location of Judo device
