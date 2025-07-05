@@ -79,8 +79,8 @@ if config_getjudo.LANGUAGE == "DE":
         41: "Tempfile scheinbar korrupt oder nicht vorhanden, Schreibe neu",
         42: "Beende Script. Schwerwiegender Fehler in Zeile: {}",
         43: "Errechneter Natriumgehalt: {}mg/L < {}mg/L bei {}°dH",
-        44: "Natriumgrenzwert würde überschritten werden. Wunschwasserhärte wird auf {} °dH gesetzt"
-
+        44: "Natriumgrenzwert würde überschritten werden. Wunschwasserhärte wird auf {} °dH gesetzt",
+        45: "Device {} associated to serialnumber {}",
     }
 
     warnings = {
