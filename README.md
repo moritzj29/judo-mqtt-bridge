@@ -97,6 +97,12 @@ main_app:
 -> the getjudo.py can be also started from a local Win10 VSCode installation, for easier tests of the config (after adding python through extensions and paho-mqtt with pip install)
 
 
+### Running in Docker
+0. MQTT should be already setup and running
+1. prepare config_judo.py to match your system
+2. run docker container and mount `config_judo.py` to `/app/config_getjudo.py`
+
+
 ### Startup
 Afterwards the device should set itself up automatically with mqtt-autoconfig in homeassitant with all entities:
 

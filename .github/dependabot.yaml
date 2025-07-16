@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"  # location of your requirements.txt or pyproject.toml
+    schedule:
+      interval: "daily"
+  - package-ecosystem: "docker"
+    directory: "/"  # location of Dockerfile
+    schedule:
+      interval: "daily"
+  
