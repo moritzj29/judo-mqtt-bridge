@@ -249,23 +249,28 @@ def main():
             for device in devices:
                 device.notify.publish([messages_getjudo.debug[30].format(sys.exc_info()[-1].tb_lineno),str(e) + " - "+ str(error_response.data)], 3)
         if data_valid == True:
-        # ToDo: check if errors are device specific
             if error_response_json["data"] != [] and error_response_json["count"] != 0:
+                # check if error message is new
                 if mydata["last_err_id"] != error_response_json["data"][0]["id"]:
                     mydata["last_err_id"] = error_response_json["data"][0]["id"]
 
                     timestamp = error_response_json["data"][0]["ts_sort"]
                     timestamp = timestamp[:-7] + ": "
 
+                    # warning
                     if error_response_json["data"][0]["type"] == "w":
                         error_message = timestamp + messages_getjudo.warnings[error_response_json["data"][0]["error"]]
                         for device in devices:
-                            device.notify.publish(error_message, 1)
-                        # notify.publish(error_message, 1)
+                            if device.SERIAL_NUMBER == error_response_json["data"][0]["serialnumber"]:
+                                device.notify.publish(error_message, 1)
+                                break
+                    # error
                     elif error_response_json["data"][0]["type"] == "e":
                         error_message = timestamp + messages_getjudo.errors[error_response_json["data"][0]["error"]]
                         for device in devices:
-                            device.notify.publish(error_message, 1)
+                            if device.SERIAL_NUMBER == error_response_json["data"][0]["serialnumber"]:
+                                device.notify.publish(error_message, 1)
+                                break
     except Exception as e:
         error_counter += 1
         for device in devices:
