@@ -2,6 +2,7 @@ import json
 import math
 import sys
 import time
+import re
 from dataclasses import dataclass, field
 import messages_getjudo
 
@@ -408,7 +409,7 @@ class Entity():
             print(messages_getjudo.debug[26])
             return
 
-        autoconf_topic = f"homeassistant/{self.entity_type}/{self.device.LOCATION}/{self.device.NAME}_{self.name}/config"
+        autoconf_topic = discovery_topic(self.entity_type, self.device.LOCATION, self.device.NAME + "_" + self.name)
         publish_json(self.device._client, autoconf_topic, entity_config)
 
     def parse(self, response_data, index, a,b):
@@ -430,7 +431,7 @@ class NotificationEntity():
         entity_config["unique_id"] = self.device.client_id + "_" + self.name
         entity_config["icon"] = self.icon
         entity_config["state_topic"] = self.device.notification_topic
-        autoconf_topic = f"homeassistant/sensor/{self.device.LOCATION}/{self.device.NAME}_{self.name}/config"
+        autoconf_topic = discovery_topic("sensor", self.device.LOCATION, self.device.NAME + "_" + self.name)
         publish_json(self.device._client, autoconf_topic, entity_config)
 
     def publish(self, message, debuglevel):
@@ -443,4 +444,11 @@ class NotificationEntity():
 def publish_json(client, topic, message):
     json_message = json.dumps(message)
     result = client.publish(topic, json_message, qos=0, retain=True)
-    
+
+def discovery_topic(entity_type, node_id, object_id, discovery_prefix="homeassistant"):
+    # https://www.home-assistant.io/integrations/mqtt/#discovery-topic
+    # format: <discovery_prefix>/<component>/[<node_id>/]<object_id>/config
+    # only alphanumeric characters, underscores, and hyphens are allowed in node_id and object_id
+    node_id = re.sub('[^A-Za-z0-9_-]+', '', node_id.replace(" ", "_"))
+    object_id = re.sub('[^A-Za-z0-9_-]+', '', object_id.replace(" ", "_"))
+    return f"{discovery_prefix}/{entity_type}/{node_id}/{object_id}/config"
