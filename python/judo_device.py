@@ -83,7 +83,6 @@ class JudoDeviceConfig:
             "availability_topic": self.availability_topic,
             "payload_available": self.AVAILABILITY_ONLINE,
             "payload_not_available": self.AVAILABILITY_OFFLINE,
-            "state_topic": self.notification_topic,
         }
 
     def entity(self, name, icon, entity_type, unit="", minimum=1, maximum=100, step=1, value=0):
@@ -373,6 +372,7 @@ class Entity():
         entity_config["unique_id"] = self.device.client_id + "_" + self.name
         entity_config["icon"] = self.icon
         entity_config["value_template"] = "{{value_json." + self.name + "}}"
+        entity_config["state_topic"] = self.device.state_topic
 
         if self.entity_type == "total_increasing":
             entity_config["device_class"] = "water"
@@ -429,6 +429,7 @@ class NotificationEntity():
         entity_config["name"] = self.device.client_id + " " + self.name
         entity_config["unique_id"] = self.device.client_id + "_" + self.name
         entity_config["icon"] = self.icon
+        entity_config["state_topic"] = self.device.notification_topic
         autoconf_topic = f"homeassistant/sensor/{self.device.LOCATION}/{self.device.NAME}_{self.name}/config"
         publish_json(self.device._client, autoconf_topic, entity_config)
 
