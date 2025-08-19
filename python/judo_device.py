@@ -147,94 +147,117 @@ class JudoDeviceConfig:
         self.avg_reg_interval.value = stored_data.reg_mean_time
 
     def update_entities(self, response_json, new_day: bool):
-        self.next_revision.parse(response_json, 7, 0, 4)
-        if self.USE_WITH_SOFTWELL_P == False:
-            total_water_temp = self.total_water.value * 1000
-            self.total_water.parse(response_json, 8, 0, 8)
-            if self.total_water.value < total_water_temp:
-                self.notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(self.total_water.value),3)
-                self.total_water.value = total_water_temp
-            self.salt_stock.parse(response_json,94, 0, 4)
-            self.salt_range.parse(response_json,94, 4, 8)
-            self.total_softwater_proportion.parse(response_json, 9, 0, 8)
-            self.water_flow.parse(response_json, 790, 34, 38)
-            self.batt_capacity.parse(response_json, 93, 6, 8)
-            self.water_lock.parse(response_json, 792, 2, 4)
-            self.sleepmode.parse(response_json,792, 20, 22)
-            self.max_waterflow.parse(response_json, 792, 26, 30)
-            self.extraction_quantity.parse(response_json, 792, 30, 34)
-            self.extraction_time.parse(response_json, 792, 34, 38)
-            self.holidaymode.parse(response_json,792, 38, 40)
-        else:
-            self.total_water.parse(response_json, 9, 0, 8)
+        try:
+            # Software version
+            val = response_json["data"][0]["data"]["1"]["data"]
+            if val != "":
+                minor = int.from_bytes(bytes.fromhex(val[2:4]), byteorder='little')
+                major = int.from_bytes(bytes.fromhex(val[4:6]), byteorder='little')
+                print("Software version: {}.{:02d}".format(major, minor))
+            # Hardware version
+            val = response_json["data"][0]["data"]["2"]["data"]
+            if val != "":
+                minor = int.from_bytes(bytes.fromhex(val[0:2]), byteorder='little')
+                major = int.from_bytes(bytes.fromhex(val[2:4]), byteorder='little')
+                print("Hardware version: {}.{:02d}".format(major, minor))
+            # Serial number
+            val = response_json["data"][0]["data"]["3"]["data"]
+            if val != "":
+                val = int.from_bytes(bytes.fromhex(val[0:8]), byteorder='little')
+                print("Gerätenummer: {}".format(val))
 
-        self.output_hardness.parse(response_json, 790, 18, 20)
-        self.input_hardness.parse(response_json, 790, 54, 56)
-        self.regenerations.parse(response_json, 791, 62, 66)
-        self.regeneration_start.parse(response_json, 791, 2, 4)
-
-        self.next_revision.value = int(self.next_revision.value/24)   #Calculation hours to days
-        self.total_water.value =float(self.total_water.value/1000) # Calculating from L to m³
-
-        if self.USE_WITH_SOFTWELL_P == False:
-            if self.holidaymode.value == 3:      #mode1
-                self.holidaymode.value = messages_getjudo.holiday_options[2]
-            elif self.holidaymode.value == 5:    #mode2
-                self.holidaymode.value = messages_getjudo.holiday_options[3]
-            elif self.holidaymode.value == 9:    #lock
-                self.holidaymode.value = messages_getjudo.holiday_options[1]
-            else:                           #off
-                self.holidaymode.value = messages_getjudo.holiday_options[0]
-
-            self.total_softwater_proportion.value = float(self.total_softwater_proportion.value/1000)# Calculating from L to m³
-            self.total_hardwater_proportion.value = round((self.total_water.value - self.total_softwater_proportion.value),3)
-            self.salt_stock.value /= 1000
-            if self.water_lock.value > 1:
-                self.water_lock.value = 1
-
-        self.regeneration_start.value &= 0x0F
-        if self.regeneration_start.value > 0:
-            self.regeneration_start.value = 1
-        
-        if new_day:
-                # mydata.day_today = today.day
-                self.save_data.offset_total_water = int(1000*self.total_water.value)
-                self.water_yesterday.value = self.water_today.value
-                self.save_data.water_yesterday = self.water_today.value
-        self.water_today.value = int(1000*self.total_water.value) - self.save_data.offset_total_water
-
-        #Hours since last regeneration / Average regeneration interval
-        if self.regenerations.value > self.save_data.reg_last_val:
-            if (self.regenerations.value - self.save_data.reg_last_val) == 1: #Regeneration has started, 
-                if self.save_data.reg_last_timestamp != 0:
-                    self.h_since_last_reg.value = math.ceil((int(time.time()) - self.save_data.reg_last_timestamp)/3600)
-                    #neuer_mittelwert = ((counter-1)*alter_mittelwert + neuer_wert)/counter
-                    self.avg_reg_interval.value = math.ceil(((self.save_data.reg_mean_counter-1)*self.save_data.reg_mean_time + self.h_since_last_reg.value)/self.save_data.reg_mean_counter)
-                    self.save_data.reg_mean_time = self.avg_reg_interval.value
-                    self.save_data.reg_mean_counter += 1
-                self.save_data.reg_last_timestamp = int(time.time()) 
-                self.save_data.reg_last_val = self.regenerations.value
-                if self.USE_WITH_SOFTWELL_P == False:
-                    self.save_data.total_softwater_at_reg = self.total_softwater_proportion.value
-                    self.save_data.total_hardwater_at_reg = self.total_hardwater_proportion.value
+            self.next_revision.parse(response_json, 7, 0, 4)
+            if self.USE_WITH_SOFTWELL_P == False:
+                total_water_temp = self.total_water.value * 1000
+                self.total_water.parse(response_json, 8, 0, 8)
+                if self.total_water.value < total_water_temp:
+                    self.notify.publish("Correction made - new value = "+str(total_water_temp)+" - wrong value = "+str(self.total_water.value),3)
+                    self.total_water.value = total_water_temp
+                self.salt_stock.parse(response_json,94, 0, 4)
+                self.salt_range.parse(response_json,94, 4, 8)
+                self.total_softwater_proportion.parse(response_json, 9, 0, 8)
+                self.water_flow.parse(response_json, 790, 34, 38)
+                self.batt_capacity.parse(response_json, 93, 6, 8)
+                self.water_lock.parse(response_json, 792, 2, 4)
+                self.sleepmode.parse(response_json,792, 20, 22)
+                self.max_waterflow.parse(response_json, 792, 26, 30)
+                self.extraction_quantity.parse(response_json, 792, 30, 34)
+                self.extraction_time.parse(response_json, 792, 34, 38)
+                self.holidaymode.parse(response_json,792, 38, 40)
             else:
-                self.save_data.reg_last_val = self.regenerations.value
-        if self.save_data.reg_last_timestamp != 0:
-            self.h_since_last_reg.value = int((int(time.time()) - self.save_data.reg_last_timestamp)/3600)
-        
-        #Mix ratio Soft:Hard since last regeneration
-        if self.USE_WITH_SOFTWELL_P == False:
-            softwater_since_reg = self.total_softwater_proportion.value - self.save_data.total_softwater_at_reg
-            hardwater_since_reg = self.total_hardwater_proportion.value - self.save_data.total_hardwater_at_reg
-            if softwater_since_reg != 0 and hardwater_since_reg !=0:
-                totalwater_since_reg = softwater_since_reg +  hardwater_since_reg
+                self.total_water.parse(response_json, 9, 0, 8)
 
-                if hardwater_since_reg < softwater_since_reg:
-                    self.mixratio.value = "1:" + str(round(1/(hardwater_since_reg/totalwater_since_reg),2))
+            self.output_hardness.parse(response_json, 790, 18, 20)
+            self.input_hardness.parse(response_json, 790, 54, 56)
+            self.regenerations.parse(response_json, 791, 62, 66)
+            self.regeneration_start.parse(response_json, 791, 2, 4)
+
+            self.next_revision.value = int(self.next_revision.value/24)   #Calculation hours to days
+            self.total_water.value =float(self.total_water.value/1000) # Calculating from L to m³
+
+            if self.USE_WITH_SOFTWELL_P == False:
+                if self.holidaymode.value == 3:      #mode1
+                    self.holidaymode.value = messages_getjudo.holiday_options[2]
+                elif self.holidaymode.value == 5:    #mode2
+                    self.holidaymode.value = messages_getjudo.holiday_options[3]
+                elif self.holidaymode.value == 9:    #lock
+                    self.holidaymode.value = messages_getjudo.holiday_options[1]
+                else:                           #off
+                    self.holidaymode.value = messages_getjudo.holiday_options[0]
+
+                self.total_softwater_proportion.value = float(self.total_softwater_proportion.value/1000)# Calculating from L to m³
+                self.total_hardwater_proportion.value = round((self.total_water.value - self.total_softwater_proportion.value),3)
+                self.salt_stock.value /= 1000
+                if self.water_lock.value > 1:
+                    self.water_lock.value = 1
+
+            self.regeneration_start.value &= 0x0F
+            if self.regeneration_start.value > 0:
+                self.regeneration_start.value = 1
+            
+            if new_day:
+                    # mydata.day_today = today.day
+                    self.save_data.offset_total_water = int(1000*self.total_water.value)
+                    self.water_yesterday.value = self.water_today.value
+                    self.save_data.water_yesterday = self.water_today.value
+            self.water_today.value = int(1000*self.total_water.value) - self.save_data.offset_total_water
+
+            #Hours since last regeneration / Average regeneration interval
+            if self.regenerations.value > self.save_data.reg_last_val:
+                if (self.regenerations.value - self.save_data.reg_last_val) == 1: #Regeneration has started, 
+                    if self.save_data.reg_last_timestamp != 0:
+                        self.h_since_last_reg.value = math.ceil((int(time.time()) - self.save_data.reg_last_timestamp)/3600)
+                        #neuer_mittelwert = ((counter-1)*alter_mittelwert + neuer_wert)/counter
+                        self.avg_reg_interval.value = math.ceil(((self.save_data.reg_mean_counter-1)*self.save_data.reg_mean_time + self.h_since_last_reg.value)/self.save_data.reg_mean_counter)
+                        self.save_data.reg_mean_time = self.avg_reg_interval.value
+                        self.save_data.reg_mean_counter += 1
+                    self.save_data.reg_last_timestamp = int(time.time()) 
+                    self.save_data.reg_last_val = self.regenerations.value
+                    if self.USE_WITH_SOFTWELL_P == False:
+                        self.save_data.total_softwater_at_reg = self.total_softwater_proportion.value
+                        self.save_data.total_hardwater_at_reg = self.total_hardwater_proportion.value
                 else:
-                    self.mixratio.value = str(round(1/(softwater_since_reg/totalwater_since_reg),2)) + ":1"
-            else:
-                self.mixratio.value = "unknown"
+                    self.save_data.reg_last_val = self.regenerations.value
+            if self.save_data.reg_last_timestamp != 0:
+                self.h_since_last_reg.value = int((int(time.time()) - self.save_data.reg_last_timestamp)/3600)
+            
+            #Mix ratio Soft:Hard since last regeneration
+            if self.USE_WITH_SOFTWELL_P == False:
+                softwater_since_reg = self.total_softwater_proportion.value - self.save_data.total_softwater_at_reg
+                hardwater_since_reg = self.total_hardwater_proportion.value - self.save_data.total_hardwater_at_reg
+                if softwater_since_reg != 0 and hardwater_since_reg !=0:
+                    totalwater_since_reg = softwater_since_reg +  hardwater_since_reg
+
+                    if hardwater_since_reg < softwater_since_reg:
+                        self.mixratio.value = "1:" + str(round(1/(hardwater_since_reg/totalwater_since_reg),2))
+                    else:
+                        self.mixratio.value = str(round(1/(softwater_since_reg/totalwater_since_reg),2)) + ":1"
+                else:
+                    self.mixratio.value = "unknown"
+        except Exception as e:
+            # log error already here to get correct line number
+            self.notify.publish([messages_getjudo.debug[31].format(sys.exc_info()[-1].tb_lineno),e],3)
+            raise e
 
     def publish_entities(self):
         #Publish all entities to homeassistant
