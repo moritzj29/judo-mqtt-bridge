@@ -460,7 +460,7 @@ class NotificationEntity():
     def publish(self, message, debuglevel):
         self.value = message
         msg = str(self.value)
-        print(msg)
+        print(f"{time.strftime('%Y-%m-%d %H:%M %Z', time.localtime(time.time()))} - {msg}")
         if self.device.MQTT_DEBUG_LEVEL  >= debuglevel:
             self.device._client.publish(self.device.notification_topic, msg, qos=0, retain=True)
 
