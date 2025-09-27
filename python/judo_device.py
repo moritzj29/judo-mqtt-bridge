@@ -59,6 +59,10 @@ class JudoDeviceConfig:
     """MQTT client, e.g., paho.mqtt.client.Client()"""
     update_autoconfig: bool = True
     """Flag indicating whether to update the auto-configuration."""
+    model: str = ""
+    """Model Type"""
+    serial_number: str = ""
+    """Serial number of the device as shown in the Judo app."""
 
     save_data: JudoDeviceSafeData = field(default_factory=JudoDeviceSafeData)
 
@@ -88,11 +92,11 @@ class JudoDeviceConfig:
             "device": {
                 "identifiers": f"[{self.client_id}]",
                 "manufacturer": self.MANUFACTURER,
-                "model": self.NAME,
+                "model": self.model,
                 "name": self.client_id,
                 "sw_version": self.software_version.value,
                 "hw_version": self.hardware_version.value,
-                "serial_number": self.serial_number.value
+                "serial_number": self.serial_number
             },
             "availability_topic": self.availability_topic,
             "payload_available": self.AVAILABILITY_ONLINE,
@@ -106,14 +110,13 @@ class JudoDeviceConfig:
 
     def setup_entities(self):
         """Create entity instances"""
-        self.software_version = VersionEntity(self, messages_getjudo.entities[24], "mdi:information-outline", "sensor", trigger_autoconfig_update=True)
-        self.hardware_version = VersionEntity(self, messages_getjudo.entities[25], "mdi:information-outline", "sensor", trigger_autoconfig_update=True)
-        self.serial_number = SerialNumberEntity(self, messages_getjudo.entities[26], "mdi:information-outline", "sensor", trigger_autoconfig_update=True)
+        self.software_version = VersionEntity(self, messages_getjudo.entities[24], "mdi:information-outline", "text", trigger_autoconfig_update=True)
+        self.hardware_version = VersionEntity(self, messages_getjudo.entities[25], "mdi:information-outline", "text", trigger_autoconfig_update=True)
 
-        self.connectivity_serial_number = ConnectivityEntity(self, messages_getjudo.entities[27], "mdi:information-outline", "sensor")
-        self.connectivity_software_version = ConnectivityEntity(self, messages_getjudo.entities[28], "mdi:router-network", "sensor")
-        self.connectivity_online = ConnectivityEntity(self, messages_getjudo.entities[29], "mdi:wifi", "sensor")
-        self.update_available = ConnectivityEntity(self, messages_getjudo.entities[30], "mdi:update", "sensor")
+        self.connectivity_serial_number = ConnectivityEntity(self, messages_getjudo.entities[27], "mdi:information-outline", "text")
+        self.connectivity_software_version = ConnectivityEntity(self, messages_getjudo.entities[28], "mdi:router-network", "text")
+        self.connectivity_online = ConnectivityEntity(self, messages_getjudo.entities[29], "mdi:wifi", "binary_sensor")
+        self.update_available = ConnectivityEntity(self, messages_getjudo.entities[30], "mdi:update", "binary_sensor")
 
         #Setting up all entities for homeassistant
         self.next_revision = self.entity(messages_getjudo.entities[0], "mdi:account-wrench", "sensor", "Tagen")
@@ -122,7 +125,7 @@ class JudoDeviceConfig:
         self.input_hardness = self.entity(messages_getjudo.entities[7], "mdi:water-plus", "sensor", "°dH")
         self.water_flow = self.entity(messages_getjudo.entities[8], "mdi:waves-arrow-right", "sensor", "L/h")
         self.batt_capacity = self.entity(messages_getjudo.entities[9], "mdi:battery-50", "sensor", "%")
-        self.regenerations = self.entity(messages_getjudo.entities[10], "mdi:water-sync", "sensor")
+        self.regenerations = self.entity(messages_getjudo.entities[10], "mdi:water-sync", "total_increasing")
         self.water_lock = self.entity(messages_getjudo.entities[11], "mdi:pipe-valve", "switch")
         self.regeneration_start = self.entity(messages_getjudo.entities[12], "mdi:recycle-variant", "switch")
         self.water_today = self.entity(messages_getjudo.entities[14], "mdi:chart-box", "sensor", "L")
@@ -179,13 +182,15 @@ class JudoDeviceConfig:
 
     def update_entities(self, response_json, new_day: bool):
         try:
+            self.parse_model(response_json) # no entity
+            self.parse_serial_number(response_json, 3, 0, 8) # no entity
+            
             self.software_version.parse(response_json, 1, (4,6), (2,4))
             self.hardware_version.parse(response_json, 2, (2,4), (0,2))
-            self.serial_number.parse(response_json, 3, 0, 8)
             self.connectivity_serial_number.parse(response_json, "serialnumber")
             self.connectivity_software_version.parse(response_json, "sv")
-            self.connectivity_online.parse(response_json, "status", lambda x: x == "online")
-            self.update_available.parse(response_json, "update", lambda x: bool(int(x)))
+            self.connectivity_online.parse(response_json, "status", lambda x: int(x == "online"))
+            self.update_available.parse(response_json, "update", lambda x: int(x))
 
             self.next_revision.parse(response_json, 7, 0, 4)
             if self.USE_WITH_SOFTWELL_P == False:
@@ -372,7 +377,6 @@ class JudoDeviceConfig:
         else:
             print(messages_getjudo.debug[9])
 
-
     def set_sleepmode(self, hours):
         if hours == 0:
             if self.send_command("73", ""):
@@ -382,7 +386,6 @@ class JudoDeviceConfig:
                 self.notify.publish(messages_getjudo.debug[12].format(hours), 2)
             if self.send_command("171", ""):
                 self.notify.publish(messages_getjudo.debug[14], 2)
-
 
     def set_holidaymode(self, mode):
         if mode == messages_getjudo.holiday_options[1]:      #lock
@@ -396,145 +399,21 @@ class JudoDeviceConfig:
                 self.notify.publish(messages_getjudo.debug[40], 1)
             self.send_command("77", "0")
 
-
     def start_regeneration(self):
         if self.send_command("65", ""):
             self.notify.publish(messages_getjudo.debug[16], 2)
-
 
     def set_value(self, obj, index, value, length):
         if self.send_command(str(index), self.int_to_le_hex(value, length)):
             self.notify.publish(messages_getjudo.debug[18].format(obj.name, value), 2)
 
-
-class Entity():
-    def __init__(self, device: JudoDeviceConfig, name, icon, entity_type, unit = "", minimum = 1, maximum = 100, step = 1, value = 0, trigger_autoconfig_update=False):
-        self.device = device
-        self.name = name
-        self.unit = unit
-        self.icon = icon
-        self.entity_type = entity_type #total_inc, sensor, number, switch, 
-        self._value = value
-        self.minimum = minimum
-        self.maximum = maximum
-        self.step = step
-        self._trigger_autoconfig_update = trigger_autoconfig_update
-
-        device.entities.append(self)
-
-    @property
-    def value(self):
-        return self._value
-
-    @value.setter
-    def value(self, new_value):
-        if self._trigger_autoconfig_update:
-            if self._value != new_value:
-                self.device.update_autoconfig = True
-        self._value = new_value
-
-    def send_entity_autoconfig(self):
-        entity_config = self.device.entity_config
-        entity_config["name"] = self.device.client_id + " " + self.name
-        entity_config["unique_id"] = self.device.client_id + "_" + self.name
-        entity_config["icon"] = self.icon
-        entity_config["value_template"] = "{{value_json." + self.name + "}}"
-        entity_config["state_topic"] = self.device.state_topic
-
-        if self.entity_type == "total_increasing":
-            entity_config["device_class"] = "water"
-            entity_config["state_class"] = "total_increasing"
-            entity_config["state_class"] = self.entity_type
-            entity_config["unit_of_measurement"] = self.unit
-            self.entity_type = "sensor"
-
-        elif self.entity_type == "number":
-            entity_config["command_topic"] = self.device.command_topic
-            entity_config["unit_of_measurement"] = self.unit
-            entity_config["min"] = self.minimum
-            entity_config["max"] = self.maximum
-            entity_config["step"] = self.step
-            entity_config["command_template"] = "{\"" + self.name + "\": {{ value }}}"
-
-        elif self.entity_type == "switch":
-            entity_config["command_topic"] = self.device.command_topic
-            entity_config["payload_on"] = "{\"" + self.name + "\": 1}"
-            entity_config["payload_off"] = "{\"" + self.name + "\": 0}"
-            entity_config["state_on"] = 1
-            entity_config["state_off"] = 0
-
-        elif self.entity_type == "sensor":
-            entity_config["unit_of_measurement"] = self.unit
-
-        elif self.entity_type == "select":
-            entity_config["command_topic"] = self.device.command_topic
-            entity_config["command_template"] = "{\"" + self.name + "\": \"{{ value }}\"}"
-            entity_config["options"] = self.unit
-
-        else:
-            print(messages_getjudo.debug[26])
+    def parse_model(self, response_data):
+        val = response_data["data"][0]["dt"]
+        if val == "":
             return
-
-        autoconf_topic = discovery_topic(self.entity_type, self.device.LOCATION, self.device.NAME + "_" + self.name)
-        publish_json(self.device._client, autoconf_topic, entity_config)
-
-    def parse(self, response_data, index, a,b):
-        val = response_data["data"][0]["data"][str(index)]["data"]
-        if val != "":
-            self.value = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
-
-class VersionEntity(Entity):
-    def parse(self, response_data, index, ab_major, ab_minor):
-        val = response_data["data"][0]["data"][str(index)]["data"]
-        if val != "":
-            a, b = ab_minor
-            minor = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
-            a, b = ab_major
-            major = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
-            self.value = "{}.{:02d}".format(major, minor)
-
-class SerialNumberEntity(Entity):
-    def parse(self, response_data, index, a,b):
-        val = response_data["data"][0]["data"][str(index)]["data"]
-        if val != "":
-            val = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
-            # based on convertDeviceNumber in tools.js
-            try:
-                device_str = str(val)
-                if (len(device_str) == 9 and int(device_str[0]) > 3):
-                    device_number_tmp = []
-                    device_number_tmp.append("0")
-                    device_number_tmp.append(str(int(device_str[0]) - 3))
-                    device_number_tmp.append("J")
-                    device_number_tmp.append(device_str[1:6])
-                    device_number_tmp.append("00")
-                    device_number_tmp.append(device_str[6:8])
-                    device_number_tmp.append("F")
-                    device_number_tmp.append(device_str[-1])
-
-                    self.value = "".join(device_number_tmp)
-                    return
-                self.value = val
-            except Exception:
-                self.value = val
-
-class ConnectivityEntity(Entity):
-    def parse(self, response_data, key, converter=lambda x: x):
-        val = response_data[key]
-        if val != "":
-            self.value = converter(val)
-
-class ModelEntity(Entity):
-    def parse(self, response_data, index):
-        val = response_data["data"][0]["data"][str(index)]["data"]
-        if val != "":
-            self.value = self.map_model(val)
-
-    @staticmethod
-    def map_model(hardcode: str) -> str:
         # based on deviceList function
         try:
-            device_id = int(hardcode, 16)
+            device_id = int(val, 16)
             device_map = {
                 50: "i-soft",             # 0x32
                 51: "i-soft safe",        # 0x33
@@ -586,10 +465,142 @@ class ModelEntity(Entity):
                 102: "optiline E",        # 0x66
                 103: "i-soft K SAFE+",    # 0x67
             }
-            return device_map.get(device_id, hardcode)
+
+            model = device_map.get(device_id, val)
+            if model != self.model:
+                self.model = model
+                self.update_autoconfig = True
 
         except Exception:
-            return hardcode
+            self.model = model
+
+    def parse_serial_number(self, response_data, index, a, b):
+        val = response_data["data"][0]["data"][str(index)]["data"]
+        if val != "":
+            val = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+            # based on convertDeviceNumber in tools.js
+            try:
+                device_str = str(val)
+                if (len(device_str) == 9 and int(device_str[0]) > 3):
+                    device_number_tmp = []
+                    device_number_tmp.append("0")
+                    device_number_tmp.append(str(int(device_str[0]) - 3))
+                    device_number_tmp.append("J")
+                    device_number_tmp.append(device_str[1:6])
+                    device_number_tmp.append("00")
+                    device_number_tmp.append(device_str[6:8])
+                    device_number_tmp.append("F")
+                    device_number_tmp.append(device_str[-1])
+
+                    val = "".join(device_number_tmp)
+                if val != self.serial_number:
+                    self.serial_number = val
+                    self.update_autoconfig = True
+            except Exception:
+                self.serial_number = str(val)
+
+class Entity():
+    def __init__(self, device: JudoDeviceConfig, name, icon, entity_type, unit = "", minimum = 1, maximum = 100, step = 1, value = 0, trigger_autoconfig_update=False):
+        self.device = device
+        self.name = name
+        self.unit = unit
+        self.icon = icon
+        self.entity_type = entity_type # for autodiscovery
+        self._entity_type = entity_type #total_inc, sensor, number, switch
+        # handles also more specific cases for e.g. sensor
+        self._value = value
+        self.minimum = minimum
+        self.maximum = maximum
+        self.step = step
+        self._trigger_autoconfig_update = trigger_autoconfig_update
+
+        device.entities.append(self)
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        if self._trigger_autoconfig_update:
+            if self._value != new_value:
+                self.device.update_autoconfig = True
+        self._value = new_value
+
+    def send_entity_autoconfig(self):
+        entity_config = self.device.entity_config
+        entity_config["name"] = self.device.client_id + " " + self.name
+        entity_config["unique_id"] = self.device.client_id + "_" + self.name
+        entity_config["icon"] = self.icon
+        entity_config["value_template"] = "{{value_json." + self.name + "}}"
+        entity_config["state_topic"] = self.device.state_topic
+
+        if self._entity_type == "sensor":
+            # https://www.home-assistant.io/integrations/sensor.mqtt/
+            entity_config["unit_of_measurement"] = self.unit
+
+        elif self._entity_type == "total_increasing":
+            # specific state_class of sensor
+            self.entity_type = "sensor"
+            entity_config["device_class"] = "water"
+            entity_config["state_class"] = "total_increasing"
+            entity_config["unit_of_measurement"] = self.unit
+
+        elif self._entity_type == "number":
+            entity_config["command_topic"] = self.device.command_topic
+            entity_config["unit_of_measurement"] = self.unit
+            entity_config["min"] = self.minimum
+            entity_config["max"] = self.maximum
+            entity_config["step"] = self.step
+            entity_config["command_template"] = "{\"" + self.name + "\": {{ value }}}"
+
+        elif self._entity_type == "switch":
+            entity_config["command_topic"] = self.device.command_topic
+            entity_config["payload_on"] = "{\"" + self.name + "\": 1}"
+            entity_config["payload_off"] = "{\"" + self.name + "\": 0}"
+            entity_config["state_on"] = 1
+            entity_config["state_off"] = 0
+
+        elif self._entity_type == "binary_sensor":
+            entity_config["payload_on"] = 1
+            entity_config["payload_off"] = 0
+
+        elif self._entity_type == "select":
+            entity_config["command_topic"] = self.device.command_topic
+            entity_config["command_template"] = "{\"" + self.name + "\": \"{{ value }}\"}"
+            entity_config["options"] = self.unit
+
+        elif self._entity_type == "text":
+            # https://www.home-assistant.io/integrations/text.mqtt/
+            pass
+
+        else:
+            print(messages_getjudo.debug[26])
+            return
+
+        autoconf_topic = discovery_topic(self.entity_type, self.device.LOCATION, self.device.NAME + "_" + self.name)
+        publish_json(self.device._client, autoconf_topic, entity_config)
+
+    def parse(self, response_data, index, a,b):
+        val = response_data["data"][0]["data"][str(index)]["data"]
+        if val != "":
+            self.value = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+
+class VersionEntity(Entity):
+    def parse(self, response_data, index, ab_major, ab_minor):
+        val = response_data["data"][0]["data"][str(index)]["data"]
+        if val != "":
+            a, b = ab_minor
+            minor = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+            a, b = ab_major
+            major = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+            self.value = "{}.{:02d}".format(major, minor)
+
+class ConnectivityEntity(Entity):
+    def parse(self, response_data, key, converter=lambda x: x):
+        val = response_data[key]
+        if val != "":
+            self.value = converter(val)
 
 class NotificationEntity():
     def __init__(self, device: JudoDeviceConfig, name, icon, counter=0, value = ""):
