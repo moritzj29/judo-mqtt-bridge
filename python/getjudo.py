@@ -76,11 +76,15 @@ def judo_login(username, password):
             device.notify.publish([messages_getjudo.debug[28].format(sys.exc_info()[-1].tb_lineno),e], 3)
         sys.exit()
 
-
-#----- INIT ----
+# ---------------
+# Start of Script
+# ---------------
 user_agent = {'user-agent':'Mozilla'}
 http = urllib3.PoolManager(10, headers=user_agent)
 
+# --------------------
+# Device Configuration
+# --------------------
 # Create a list of JudoDeviceConfig instances from the configuration
 devices: list[JudoDeviceConfig] = []
 if len(config_getjudo.DEVICES) > 1:
@@ -104,6 +108,9 @@ mydata = {"token": 0, "day_today": "", "last_err_id": "", "devices": {}}
 for device in devices:
     device.setup_entities()
 
+# ---------------
+# MQTT Connection
+# ---------------
 try: 
     client = mqtt.Client()
     client.on_connect = on_connect
@@ -119,6 +126,7 @@ try:
 except Exception as e:
     sys.exit(messages_getjudo.debug[33])
 
+# pass client instance to all devices
 for device in devices:
     device._client = client
 
@@ -167,7 +175,9 @@ if mydata["token"] == 0:
     judo_login(config_getjudo.JUDO_USER, config_getjudo.JUDO_PASSWORD)
 
 
-#----- Mainthread ----
+# ----------------
+# Main Thread Loop
+# ----------------
 def main():
     error_counter = 0
     data_valid = False

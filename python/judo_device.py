@@ -30,7 +30,9 @@ class JudoDeviceConfig:
     NAME: str
     MANUFACTURER: str
     SW_VERSION: str
+    """Software version of the connectivity module."""
     SERIAL_NUMBER: str
+    """Serial number of connectivity module, used to identify the device."""
     AVAILABILITY_ONLINE: str
     AVAILABILITY_OFFLINE: str
     USE_SODIUM_CHECK: bool
@@ -48,9 +50,13 @@ class JudoDeviceConfig:
 
     # not set at initialization
     entities: list['Entity'] = field(default_factory=lambda: [])
-    notify: 'NotificationEntity | None' = None  # Notification entity for errors and warnings
-    _http: any  = None # HTTP client, e.g., urllib3.PoolManager()
-    _client: any  = None # MQTT client, e.g., paho.mqtt.client.Client()
+    """List of entity instances"""
+    notify: 'NotificationEntity | None' = None
+    """Notification entity for errors and warnings"""
+    _http: any  = None
+    """HTTP client, e.g., urllib3.PoolManager()"""
+    _client: any  = None
+    """MQTT client, e.g., paho.mqtt.client.Client()"""
 
     save_data: JudoDeviceSafeData = field(default_factory=JudoDeviceSafeData)
 
@@ -82,6 +88,7 @@ class JudoDeviceConfig:
     
     @property
     def entity_config(self):
+        """Device configuration for Home Assistant. Used for auto-discovery of entities."""
         return {
             "device": self.entity_device_config,
             "availability_topic": self.availability_topic,
@@ -95,6 +102,7 @@ class JudoDeviceConfig:
         return e
 
     def setup_entities(self):
+        """Create entity instances"""
         #Setting up all entities for homeassistant
         self.next_revision = self.entity(messages_getjudo.entities[0], "mdi:account-wrench", "sensor", "Tagen")
         self.total_water = self.entity(messages_getjudo.entities[1], "mdi:water-circle", "total_increasing", "m³")
@@ -271,8 +279,11 @@ class JudoDeviceConfig:
 
     def send_command(self, index, data):
         try:
-            # ToDo: make device specific
-            cmd_response = self._http.request('GET', f"https://www.myjudo.eu/interface/?token={self.save_data.token}&group=register&command=write%20data&serial_number={self.SERIAL_NUMBER}&dt={self.save_data.dt}&index={index}&data={data}&da={self.save_data.da}&role=customer")
+            cmd_response = self._http.request('GET',
+                                              f"https://www.myjudo.eu/interface/?token={self.save_data.token}&group=register&command=write%20data"
+                                              + f"&serial_number={self.SERIAL_NUMBER}&dt={self.save_data.dt}"
+                                              + f"&index={index}&data={data}&da={self.save_data.da}&role=customer"
+                                              )
             cmd_response_json = json.loads(cmd_response.data)
             if "status" in cmd_response_json:
                 if cmd_response_json["status"] == "ok":
