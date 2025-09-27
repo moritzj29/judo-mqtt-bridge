@@ -28,12 +28,6 @@ def on_connect(client, userdata, flags, rc):
         
         client.publish(availability_topic, config_getjudo.AVAILABILITY_ONLINE, qos=0, retain=True)
 
-        for device in devices:
-            for entity in device.entities:
-                entity.send_entity_autoconfig()
-            device.notify.send_autoconfig()
-
-        print(messages_getjudo.debug[3])
     else:
         print(messages_getjudo.debug[4].format(rc))
 
@@ -103,10 +97,6 @@ for device_dict in config_getjudo.DEVICES:
     devices.append(device)
 
 mydata = {"token": 0, "day_today": "", "last_err_id": "", "devices": {}}
-
-# Setting up all entities for homeassistant
-for device in devices:
-    device.setup_entities()
 
 # ---------------
 # MQTT Connection

@@ -57,8 +57,13 @@ class JudoDeviceConfig:
     """HTTP client, e.g., urllib3.PoolManager()"""
     _client: any  = None
     """MQTT client, e.g., paho.mqtt.client.Client()"""
+    update_autoconfig: bool = True
+    """Flag indicating whether to update the auto-configuration."""
 
     save_data: JudoDeviceSafeData = field(default_factory=JudoDeviceSafeData)
+
+    def __post_init__(self):
+        self.setup_entities()
 
     @property
     def command_topic(self):
@@ -77,20 +82,18 @@ class JudoDeviceConfig:
         return f"{self.NAME}-{self.LOCATION}"
     
     @property
-    def entity_device_config(self):
-        return {
-            "identifiers": f"[{self.client_id}]",
-            "manufacturer": self.MANUFACTURER,
-            "model": self.NAME,
-            "name": self.client_id,
-            "sw_version": self.SW_VERSION
-        }
-    
-    @property
     def entity_config(self):
         """Device configuration for Home Assistant. Used for auto-discovery of entities."""
         return {
-            "device": self.entity_device_config,
+            "device": {
+                "identifiers": f"[{self.client_id}]",
+                "manufacturer": self.MANUFACTURER,
+                "model": self.NAME,
+                "name": self.client_id,
+                "sw_version": self.software_version.value,
+                "hw_version": self.hardware_version.value,
+                "serial_number": self.serial_number.value
+            },
             "availability_topic": self.availability_topic,
             "payload_available": self.AVAILABILITY_ONLINE,
             "payload_not_available": self.AVAILABILITY_OFFLINE,
@@ -103,6 +106,15 @@ class JudoDeviceConfig:
 
     def setup_entities(self):
         """Create entity instances"""
+        self.software_version = VersionEntity(self, messages_getjudo.entities[24], "mdi:information-outline", "sensor", trigger_autoconfig_update=True)
+        self.hardware_version = VersionEntity(self, messages_getjudo.entities[25], "mdi:information-outline", "sensor", trigger_autoconfig_update=True)
+        self.serial_number = SerialNumberEntity(self, messages_getjudo.entities[26], "mdi:information-outline", "sensor", trigger_autoconfig_update=True)
+
+        self.connectivity_serial_number = ConnectivityEntity(self, messages_getjudo.entities[27], "mdi:information-outline", "sensor")
+        self.connectivity_software_version = ConnectivityEntity(self, messages_getjudo.entities[28], "mdi:router-network", "sensor")
+        self.connectivity_online = ConnectivityEntity(self, messages_getjudo.entities[29], "mdi:wifi", "sensor")
+        self.update_available = ConnectivityEntity(self, messages_getjudo.entities[30], "mdi:update", "sensor")
+
         #Setting up all entities for homeassistant
         self.next_revision = self.entity(messages_getjudo.entities[0], "mdi:account-wrench", "sensor", "Tagen")
         self.total_water = self.entity(messages_getjudo.entities[1], "mdi:water-circle", "total_increasing", "m³")
@@ -157,25 +169,23 @@ class JudoDeviceConfig:
 
         self.avg_reg_interval.value = stored_data.reg_mean_time
 
+    def send_autoconfig(self):
+        """Send auto-configuration for all entities over MQTT.
+            Entity values should already be set to populate device configuration."""
+        for entity in self.entities:
+            entity.send_entity_autoconfig()
+        self.notify.send_autoconfig()
+        print(messages_getjudo.debug[3])
+
     def update_entities(self, response_json, new_day: bool):
         try:
-            # Software version
-            val = response_json["data"][0]["data"]["1"]["data"]
-            if val != "":
-                minor = int.from_bytes(bytes.fromhex(val[2:4]), byteorder='little')
-                major = int.from_bytes(bytes.fromhex(val[4:6]), byteorder='little')
-                print("Software version: {}.{:02d}".format(major, minor))
-            # Hardware version
-            val = response_json["data"][0]["data"]["2"]["data"]
-            if val != "":
-                minor = int.from_bytes(bytes.fromhex(val[0:2]), byteorder='little')
-                major = int.from_bytes(bytes.fromhex(val[2:4]), byteorder='little')
-                print("Hardware version: {}.{:02d}".format(major, minor))
-            # Serial number
-            val = response_json["data"][0]["data"]["3"]["data"]
-            if val != "":
-                val = int.from_bytes(bytes.fromhex(val[0:8]), byteorder='little')
-                print("Gerätenummer: {}".format(val))
+            self.software_version.parse(response_json, 1, (4,6), (2,4))
+            self.hardware_version.parse(response_json, 2, (2,4), (0,2))
+            self.serial_number.parse(response_json, 3, 0, 8)
+            self.connectivity_serial_number.parse(response_json, "serialnumber")
+            self.connectivity_software_version.parse(response_json, "sv")
+            self.connectivity_online.parse(response_json, "status", lambda x: x == "online")
+            self.update_available.parse(response_json, "update", lambda x: bool(int(x)))
 
             self.next_revision.parse(response_json, 7, 0, 4)
             if self.USE_WITH_SOFTWELL_P == False:
@@ -271,6 +281,11 @@ class JudoDeviceConfig:
             raise e
 
     def publish_entities(self):
+        if self.update_autoconfig:
+            # autoconfig values changed -> resend autoconfig
+            self.send_autoconfig()
+            self.update_autoconfig = False
+        
         #Publish all entities to homeassistant
         outp_val_dict = {}
         for entity in self.entities:
@@ -393,16 +408,30 @@ class JudoDeviceConfig:
 
 
 class Entity():
-    def __init__(self, device: JudoDeviceConfig, name, icon, entity_type, unit = "", minimum = 1, maximum = 100, step = 1, value = 0):
+    def __init__(self, device: JudoDeviceConfig, name, icon, entity_type, unit = "", minimum = 1, maximum = 100, step = 1, value = 0, trigger_autoconfig_update=False):
         self.device = device
         self.name = name
         self.unit = unit
         self.icon = icon
         self.entity_type = entity_type #total_inc, sensor, number, switch, 
-        self.value = value
+        self._value = value
         self.minimum = minimum
         self.maximum = maximum
         self.step = step
+        self._trigger_autoconfig_update = trigger_autoconfig_update
+
+        device.entities.append(self)
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new_value):
+        if self._trigger_autoconfig_update:
+            if self._value != new_value:
+                self.device.update_autoconfig = True
+        self._value = new_value
 
     def send_entity_autoconfig(self):
         entity_config = self.device.entity_config
@@ -453,6 +482,114 @@ class Entity():
         val = response_data["data"][0]["data"][str(index)]["data"]
         if val != "":
             self.value = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+
+class VersionEntity(Entity):
+    def parse(self, response_data, index, ab_major, ab_minor):
+        val = response_data["data"][0]["data"][str(index)]["data"]
+        if val != "":
+            a, b = ab_minor
+            minor = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+            a, b = ab_major
+            major = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+            self.value = "{}.{:02d}".format(major, minor)
+
+class SerialNumberEntity(Entity):
+    def parse(self, response_data, index, a,b):
+        val = response_data["data"][0]["data"][str(index)]["data"]
+        if val != "":
+            val = int.from_bytes(bytes.fromhex(val[a:b]), byteorder='little')
+            # based on convertDeviceNumber in tools.js
+            try:
+                device_str = str(val)
+                if (len(device_str) == 9 and int(device_str[0]) > 3):
+                    device_number_tmp = []
+                    device_number_tmp.append("0")
+                    device_number_tmp.append(str(int(device_str[0]) - 3))
+                    device_number_tmp.append("J")
+                    device_number_tmp.append(device_str[1:6])
+                    device_number_tmp.append("00")
+                    device_number_tmp.append(device_str[6:8])
+                    device_number_tmp.append("F")
+                    device_number_tmp.append(device_str[-1])
+
+                    self.value = "".join(device_number_tmp)
+                    return
+                self.value = val
+            except Exception:
+                self.value = val
+
+class ConnectivityEntity(Entity):
+    def parse(self, response_data, key, converter=lambda x: x):
+        val = response_data[key]
+        if val != "":
+            self.value = converter(val)
+
+class ModelEntity(Entity):
+    def parse(self, response_data, index):
+        val = response_data["data"][0]["data"][str(index)]["data"]
+        if val != "":
+            self.value = self.map_model(val)
+
+    @staticmethod
+    def map_model(hardcode: str) -> str:
+        # based on deviceList function
+        try:
+            device_id = int(hardcode, 16)
+            device_map = {
+                50: "i-soft",             # 0x32
+                51: "i-soft safe",        # 0x33
+                52: "Softwell P",         # 0x34
+                53: "Softwell S",         # 0x35
+                54: "Softwell K",         # 0x36
+                55: "i-soft TGA",         # 0x37
+                56: "QUICKSOFT-M",        # 0x38
+                57: "QUICKSOFT-P",        # 0x39
+                60: "i-fill",             # 0x3C
+                61: "i-dos-ewac",         # 0x3D
+                65: "i-dos-ewac",         # 0x41
+                66: "i-soft K SAFE+",     # 0x42
+                67: "i-soft K",           # 0x43
+                68: "ZEWA i-SAFE",        # 0x44
+                104: "ZEWA i-SAFE",       # 0x68
+                70: "QUICKSOFT CD",       # 0x46
+                71: "SOFTwell KP",        # 0x47
+                72: "SOFTwell KS",        # 0x48
+                73: "optiline Z",         # 0x49
+                74: "optiline E",         # 0x4A
+                75: "i-soft PRO",         # 0x4B
+                88: "i-soft PRO",         # 0x58
+                76: "i-soft PRO L",       # 0x4C
+                77: "QUICKSOFT MP",       # 0x4D
+                78: "i-soft C SAFE",      # 0x4E
+                79: "i-soft C",           # 0x4F
+                80: "i-soft K",           # 0x50
+                81: "i-soft K SAFE+",     # 0x51
+                82: "SOFTwell KP",        # 0x52
+                83: "i-soft",             # 0x53
+                84: "i-soft K",           # 0x54
+                85: "i-soft TGA",         # 0x55
+                86: "i-soft safe",        # 0x56
+                87: "i-soft SAFE+",       # 0x57
+                89: "Softwell P",         # 0x59
+                90: "Softwell K",         # 0x5A
+                91: "Quicksoft M",        # 0x5B
+                92: "Quicksoft P",        # 0x5C
+                93: "Scansoft-M",         # 0x5D
+                94: "Scansoft-P",         # 0x5E
+                95: "Finesky WHS-C",      # 0x5F
+                96: "Finesky WHS-P",      # 0x60
+                97: "QUICKSOFT CD",       # 0x61
+                98: "Softwell KP",        # 0x62
+                99: "Softwell S",         # 0x63
+                100: "Softwell KS",       # 0x64
+                101: "optiline Z",        # 0x65
+                102: "optiline E",        # 0x66
+                103: "i-soft K SAFE+",    # 0x67
+            }
+            return device_map.get(device_id, hardcode)
+
+        except Exception:
+            return hardcode
 
 class NotificationEntity():
     def __init__(self, device: JudoDeviceConfig, name, icon, counter=0, value = ""):

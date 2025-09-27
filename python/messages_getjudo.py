@@ -32,7 +32,14 @@ if config_getjudo.LANGUAGE == "DE":
         20 : "Urlaubsmodus",
         21 : "Stunden_seit_letzter_Regeneration",
         22 : "durchschn_Regenerationsintervall",
-        23 : "Mischungsverhaeltnis_Weich_Hart"
+        23 : "Mischungsverhaeltnis_Weich_Hart",
+        24 : "Software_Version",
+        25 : "Hardware_Version",
+        26 : "Seriennummer",
+        27 : "Connectivity_Modul_Seriennummer",
+        28 : "Connectivity_Modul_Software_Version",
+        29 : "Connectivity_Modul_Online",
+        30 : "Update_verfügbar",
     }
 
     debug = {
@@ -171,7 +178,14 @@ else:
         20: "Holiday_mode",
         21 : "Hours_since_last_regeneration",
         22 : "Avg_regeneration_interval",
-        23 : "Mix_ratio_Soft:Hard"
+        23 : "Mix_ratio_Soft:Hard",
+        24 : "Software_Version",
+        25 : "Hardware_Version",
+        26 : "Serial_Number",
+        27 : "Connectivity_Module_Serial_Number",
+        28 : "Connectivity_Module_Software_Version",
+        29 : "Connectivity_Module_Online",
+        30 : "Update_available",
     }
 
     debug = {
