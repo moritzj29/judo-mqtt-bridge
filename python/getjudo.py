@@ -92,7 +92,9 @@ else:
 for device_dict in config_getjudo.DEVICES:
     device = JudoDeviceConfig(
         availability_topic=availability_topic,
-        MQTT_DEBUG_LEVEL=config_getjudo.MQTT_DEBUG_LEVEL, **device_dict)
+        MQTT_DEBUG_LEVEL=config_getjudo.MQTT_DEBUG_LEVEL,
+        CONSOLE_DEBUG_LEVEL=config_getjudo.CONSOLE_DEBUG_LEVEL,
+        **device_dict)
     device._http = http
     devices.append(device)
 
@@ -216,7 +218,7 @@ def main():
                     # update mydata with the current device data
                     mydata["devices"][device.SERIAL_NUMBER] = device.save_data
 
-                    print("Publishing parsed values over MQTT....")
+                    # print("Publishing parsed values over MQTT....")
                     device.publish_entities()
 
             elif response_json["status"] == "error":

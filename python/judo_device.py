@@ -40,7 +40,10 @@ class JudoDeviceConfig:
     LIMIT_MAX_WATERFLOW: int
     LIMIT_EXTRACTION_QUANTITY: int
     USE_WITH_SOFTWELL_P: bool
-    MQTT_DEBUG_LEVEL: int  # Debug level for MQTT messages
+    MQTT_DEBUG_LEVEL: int
+    """Debug level for MQTT messages. 0 to disable."""
+    CONSOLE_DEBUG_LEVEL: int
+    """Debug level for console output. 0 to disable."""
     availability_topic: str
 
     # not set at initialization
@@ -460,8 +463,9 @@ class NotificationEntity():
     def publish(self, message, debuglevel):
         self.value = message
         msg = str(self.value)
-        print(f"{time.strftime('%Y-%m-%d %H:%M %Z', time.localtime(time.time()))} - {msg}")
-        if self.device.MQTT_DEBUG_LEVEL  >= debuglevel:
+        if self.device.CONSOLE_DEBUG_LEVEL >= debuglevel:
+            print(f"{time.strftime('%Y-%m-%d %H:%M %Z', time.localtime(time.time()))} - {msg}")
+        if self.device.MQTT_DEBUG_LEVEL >= debuglevel:
             self.device._client.publish(self.device.notification_topic, msg, qos=0, retain=True)
 
 def publish_json(client, topic, message):

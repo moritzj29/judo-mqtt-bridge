@@ -52,7 +52,8 @@ DEVICES = [
     ]
 #Error- and warning messages of plant published to notification topic ( LOCATION/NAME/notify ). Can be used for hassio telegram bot..
 LANGUAGE = "DE"                     # "DE" / "ENG"
-MQTT_DEBUG_LEVEL = 2                # 0=0ff, 1=Judo-Warnings/Errors, 2=Command feedback  3=Script Errors, Exceptions
+MQTT_DEBUG_LEVEL = 2                # 0=0ff, 1=Judo-Warnings/Errors, 2=Command feedback  3=Debug (Script Errors, Exceptions)
+CONSOLE_DEBUG_LEVEL = 2             # for printing to console, same levels as MQTT_DEBUG_LEVEL
 MAX_RETRIES = 3
 
 #The environment in which the script will run. Select "True" if you want to run it in the Appdeamon, or set "False" if you want to run the script on a generic Linux.
