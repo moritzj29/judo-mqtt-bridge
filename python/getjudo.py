@@ -22,6 +22,8 @@ class Function_Caller(Timer):
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print(messages_getjudo.debug[1])
+        # watch for homeassistant status to resend discovery messages if needed
+        client.subscribe("homeassistant/status")
         for device in devices:
             client.subscribe(device.command_topic)
         print(messages_getjudo.debug[2])
@@ -36,12 +38,22 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, message):
     print(messages_getjudo.debug[5].format(message.topic, message.payload))
     try:
+        if message.topic == "homeassistant/status":
+            payload = message.payload.decode()
+            print(f"Home Assistant status: {payload}")
+            if payload.lower() == "online":
+                print("HA is online, re-sending discovery...")
+                for device in devices:
+                    # set flag to resend discovery in next loop iteration
+                    device.notify.publish([messages_getjudo.debug[46].format(payload)], 2)
+                    device.update_autoconfig = True
+            return
+
         for device in devices:
             if message.topic == device.command_topic:
                 # relevant device found
                 break
         else:
-            # ToDo
             device.notify.publish([messages_getjudo.debug[27].format(sys.exc_info()[-1].tb_lineno),e], 3)
         device.on_message(userdata, message)
 

@@ -87,7 +87,8 @@ if config_getjudo.LANGUAGE == "DE":
         42: "Beende Script. Schwerwiegender Fehler in Zeile: {}",
         43: "Errechneter Natriumgehalt: {}mg/L < {}mg/L bei {}°dH",
         44: "Natriumgrenzwert würde überschritten werden. Wunschwasserhärte wird auf {} °dH gesetzt",
-        45: "Device {} associated to serialnumber {}",
+        45: "Gerät {} verknüpft mit Seriennummer {}",
+        46: "Home Assistant Status geändert zu {}",
     }
 
     warnings = {
@@ -232,7 +233,9 @@ else:
         41: "Temp-file seems to be currupt or not existent, writing a new one",
         42: "Canceling Script, Fatal Error on line: {}",
         43: "Calculated sodium content: {}mg/L < {}mg/L at {}°dH",
-        44: "Sodium level would be exceeded. Desired hardness set to {} °dH"
+        44: "Sodium level would be exceeded. Desired hardness set to {} °dH",
+        45: "Device {} associated to serialnumber {}",
+        46: "Home Assistant status changed to {}",
     }
 
 
